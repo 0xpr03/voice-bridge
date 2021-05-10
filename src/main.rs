@@ -1,4 +1,4 @@
-use std::env;
+use std::{collections::HashMap, env, sync::Arc};
 use serde::Deserialize;
 use tsclientlib::{ClientId, Connection, DisconnectOptions, Identity, StreamItem};
 use tsproto_packets::packets::{AudioData, CodecType, OutAudio, OutPacket};
@@ -20,10 +20,11 @@ struct ConnectionId(u64);
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
 // The voice client can be retrieved in any command using `songbird::get(ctx).await`.
-use songbird::SerenityInit;
+use songbird::{SerenityInit, Songbird};
+use songbird::driver::{Config as DriverConfig, DecodeMode};
 
 // Import the `Context` to handle commands.
-use serenity::client::Context;
+use serenity::{client::Context, prelude::{RwLock, TypeMapKey}};
 
 use serenity::{
     async_trait,
@@ -52,6 +53,12 @@ struct Config {
     volume: f32,
 }
 
+struct ListenerHolder;
+
+impl TypeMapKey for ListenerHolder {
+    type Value = Arc<mpsc::Sender<OutPacket>>;
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -71,12 +78,34 @@ async fn main() -> Result<()> {
                    .prefix("~"))
         .group(&discord::GENERAL_GROUP);
 
+	// Here, we need to configure Songbird to decode all incoming voice packets.
+    // If you want, you can do this on a per-call basis---here, we need it to
+    // read the audio data that other people are sending us!
+    let songbird = Songbird::serenity();
+    songbird.set_config(
+        DriverConfig::default()
+            .decode_mode(DecodeMode::Decode)
+    );
+
+
     let mut client = Client::builder(&config.discord_token)
         .event_handler(discord::Handler)
         .framework(framework)
-        .register_songbird()
+        .register_songbird_with(songbird.into())
         .await
         .expect("Err creating client");
+
+	let (tx,mut rx) = mpsc::channel(50);
+	let voice_pipes: Arc<mpsc::Sender<OutPacket>> = Arc::new(tx);
+	{
+		// Open the data lock in write mode, so keys can be inserted to it.
+		let mut data = client.data.write().await;
+
+		// The CommandCounter Value has the following type:
+		// Arc<RwLock<HashMap<String, u64>>>
+		// So, we have to insert the same type to it.
+		data.insert::<ListenerHolder>(voice_pipes);
+	}
 
     tokio::spawn(async move {
         let _ = client.start().await.map_err(|why| println!("Client ended: {:?}", why));
@@ -107,13 +136,13 @@ async fn main() -> Result<()> {
 		r?;
 	}
 
-	let (send, mut recv) = mpsc::channel(5);
-	{
-		let mut a2t = audiodata.a2ts.lock().unwrap();
-		a2t.set_listener(send);
-		a2t.set_volume(config.volume);
-		a2t.set_playing(true);
-	}
+	// let (send, mut recv) = mpsc::channel(5);
+	// {
+	// 	let mut a2t = audiodata.a2ts.lock().unwrap();
+	// 	a2t.set_listener(send);
+	// 	a2t.set_volume(config.volume);
+	// 	a2t.set_playing(true);
+	// }
 
 	loop {
 		let t2a = audiodata.ts2a.clone();
@@ -134,7 +163,15 @@ async fn main() -> Result<()> {
 
 		// Wait for ctrl + c
 		tokio::select! {
-			send_audio = recv.recv() => {
+			// send_audio = recv.recv() => {
+			// 	if let Some(packet) = send_audio {
+			// 		con.send_audio(packet)?;
+			// 	} else {
+			// 		info!(logger, "Audio sending stream was canceled");
+			// 		break;
+			// 	}
+			// }
+			send_audio = rx.recv() => {
 				if let Some(packet) = send_audio {
 					con.send_audio(packet)?;
 				} else {
@@ -149,9 +186,10 @@ async fn main() -> Result<()> {
 			}
 		};
 	}
-
+	println!("Disconnecting");
 	// Disconnect
 	con.disconnect(DisconnectOptions::new())?;
 	con.events().for_each(|_| future::ready(())).await;
+	println!("Disconnected");
     Ok(())
 }
