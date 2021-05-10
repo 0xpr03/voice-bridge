@@ -153,7 +153,12 @@ async fn main() -> Result<()> {
 	// 	a2t.set_volume(config.volume);
 	// 	a2t.set_playing(true);
 	// }
-	
+	let encoder = audiopus::coder::Encoder::new(
+		audiopus::SampleRate::Hz48000,
+		audiopus::Channels::Stereo,
+		audiopus::Application::Voip)
+		.expect("Can't construct encoder!");
+	let encoder = Arc::new(Mutex::new(encoder));
 	let mut interval = tokio::time::interval(Duration::from_millis(TICK_TIME));
 	
 	// tokio::spawn(async {
@@ -207,14 +212,13 @@ async fn main() -> Result<()> {
 					//eprintln!("Tick took {}ms",dur.as_millis());
 				}
 				let start = std::time::Instant::now();
-				if let Some(processed) = process_audio(&voice_buffer).await {
+				if let Some(processed) = process_audio(&voice_buffer,&encoder).await {
 					con.send_audio(processed)?;
 					let dur = start.elapsed();
 					if dur >= Duration::from_millis(1) {
 						eprintln!("Audio pipeline took {}ms",dur.as_millis());
 					}
 				}
-				
 			}
 			_ = tokio::signal::ctrl_c() => { break; }
 			r = events => {
@@ -233,7 +237,7 @@ async fn main() -> Result<()> {
 
 
 
-async fn process_audio(voice_buffer: &AudioBufferDiscord) -> Option<OutPacket> {
+async fn process_audio(voice_buffer: &AudioBufferDiscord, encoder: &Arc<Mutex<Encoder>>) -> Option<OutPacket> {
 	let mut buffer_map;
 	{
 		let mut lock = voice_buffer.lock().await;
@@ -243,6 +247,7 @@ async fn process_audio(voice_buffer: &AudioBufferDiscord) -> Option<OutPacket> {
 		return None;
 	}
 	let mut encoded = [0; 1024];
+	let encoder_c = encoder.clone();
 	let res = task::spawn_blocking(move || {
 		let start = std::time::Instant::now();
 		let mut data: Vec<i16> = Vec::with_capacity(STEREO_20MS);
@@ -258,13 +263,9 @@ async fn process_audio(voice_buffer: &AudioBufferDiscord) -> Option<OutPacket> {
 			}
 		}
 		
-		let encoder = audiopus::coder::Encoder::new(
-			audiopus::SampleRate::Hz48000,
-			audiopus::Channels::Stereo,
-			audiopus::Application::Voip)
-			.expect("Can't construct encoder!");
 		
-		let length = match encoder.encode(&data, &mut encoded) {
+		let lock = encoder_c.try_lock().expect("Can't reach encoder!");
+		let length = match lock.encode(&data, &mut encoded) {
 			Err(e) => {eprintln!("Failed to encode voice: {}",e); return None;},
 			Ok(size) => size,
 		};
