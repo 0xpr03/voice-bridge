@@ -65,6 +65,10 @@ impl TypeMapKey for ListenerHolder {
     type Value = AudioBufferDiscord;
 }
 
+const TICK_TIME: u64 = 20;
+const FRAME_SIZE_MS: usize = 20;
+const STEREO_20MS: usize = 48000 * 2 * FRAME_SIZE_MS / 1000;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -149,8 +153,8 @@ async fn main() -> Result<()> {
 	// 	a2t.set_volume(config.volume);
 	// 	a2t.set_playing(true);
 	// }
-
-	let mut interval = tokio::time::interval(Duration::from_millis(20));
+	
+	let mut interval = tokio::time::interval(Duration::from_millis(TICK_TIME));
 	
 	// tokio::spawn(async {
 	// 	loop {
@@ -160,24 +164,24 @@ async fn main() -> Result<()> {
 	// 		}
 	// 	}
 	// });
-
+	
 	loop {
 		let t2a = audiodata.ts2a.clone();
 		let events = con.events().try_for_each(|e| async {
-			if let StreamItem::Audio(packet) = e {
-				let from = ClientId(match packet.data().data() {
-					AudioData::S2C { from, .. } => *from,
-					AudioData::S2CWhisper { from, .. } => *from,
-					_ => panic!("Can only handle S2C packets but got a C2S packet"),
-				});
-				let mut t2a = t2a.lock().unwrap();
-				if let Err(e) = t2a.play_packet((con_id, from), packet) {
-					debug!(logger, "Failed to play packet"; "error" => %e);
-				}
-			}
+			// if let StreamItem::Audio(packet) = e {
+			// 	let from = ClientId(match packet.data().data() {
+			// 		AudioData::S2C { from, .. } => *from,
+			// 		AudioData::S2CWhisper { from, .. } => *from,
+			// 		_ => panic!("Can only handle S2C packets but got a C2S packet"),
+			// 	});
+			// 	let mut t2a = t2a.lock().unwrap();
+			// 	if let Err(e) = t2a.play_packet((con_id, from), packet) {
+			// 		debug!(logger, "Failed to play packet"; "error" => %e);
+			// 	}
+			// }
 			Ok(())
 		});
-
+		let start = std::time::Instant::now();
 		// Wait for ctrl + c
 		tokio::select! {
 			// send_audio = recv.recv() => {
@@ -198,9 +202,19 @@ async fn main() -> Result<()> {
 			// 	}
 			// }
 			_send = interval.tick() => {
+				let dur = start.elapsed();
+				if dur.as_millis() > TICK_TIME as u128 {
+					//eprintln!("Tick took {}ms",dur.as_millis());
+				}
+				let start = std::time::Instant::now();
 				if let Some(processed) = process_audio(&voice_buffer).await {
 					con.send_audio(processed)?;
+					let dur = start.elapsed();
+					if dur >= Duration::from_millis(1) {
+						eprintln!("Audio pipeline took {}ms",dur.as_millis());
+					}
 				}
+				
 			}
 			_ = tokio::signal::ctrl_c() => { break; }
 			r = events => {
@@ -217,7 +231,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-const STEREO_20MS: usize = 48000 * 2 * 20 / 1000;
+
 
 async fn process_audio(voice_buffer: &AudioBufferDiscord) -> Option<OutPacket> {
 	let mut buffer_map;
@@ -254,7 +268,7 @@ async fn process_audio(voice_buffer: &AudioBufferDiscord) -> Option<OutPacket> {
 			Err(e) => {eprintln!("Failed to encode voice: {}",e); return None;},
 			Ok(size) => size,
 		};
-		println!("Data size: {}/{} enc-length: {}",data.len(),STEREO_20MS,length);
+		//println!("Data size: {}/{} enc-length: {}",data.len(),STEREO_20MS,length);
 		//println!("length size: {}",length);
 		let duration = start.elapsed().as_millis();
 		if duration > 15 {

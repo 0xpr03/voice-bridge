@@ -391,7 +391,12 @@ impl VoiceEventHandler for Receiver {
                 // }
                 if let Some(audio) = audio {
                     {
+                        let time = std::time::Instant::now();
                         let mut lock = self.sink.lock().await;
+                        let dur = time.elapsed();
+                        if dur > Duration::from_nanos(500) {
+                            eprintln!("Akquiring lock took {}ms",dur.as_millis());
+                        }
                         if let Some(buffer) = lock.get_mut(&packet.ssrc) {
                             buffer.extend(audio);
                         } else {
