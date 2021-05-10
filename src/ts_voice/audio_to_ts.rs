@@ -91,7 +91,6 @@ impl AudioToTs {
 				encoder,
 				listener,
 				volume,
-
 				opus_output: [0; MAX_OPUS_FRAME_SIZE],
 			}
 		}).map_err(|e| format_err!("SDL error: {}", e))

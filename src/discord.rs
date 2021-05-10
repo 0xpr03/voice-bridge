@@ -122,7 +122,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
 
     if let Ok(_) = conn_result {
         // NOTE: this skips listening for the actual connection result.
-        let channel: Arc<mpsc::Sender<OutPacket>>;
+        let channel: crate::AudioBufferDiscord;
         {
             let data_read = ctx.data.read().await;
             channel = data_read.get::<ListenerHolder>().expect("Expected CommandCounter in TypeMap.").clone();
@@ -332,11 +332,11 @@ fn check_msg(result: SerenityResult<Message>) {
 }
 
 struct Receiver{
-    sink: Arc<mpsc::Sender<OutPacket>>,
+    sink: crate::AudioBufferDiscord,
 }
 
 impl Receiver {
-    pub fn new(voice_receiver: Arc<mpsc::Sender<OutPacket>>) -> Self {
+    pub fn new(voice_receiver: crate::AudioBufferDiscord) -> Self {
         // You can manage state here, such as a buffer of audio packet bytes so
         // you can later store them in intervals.
         Self {
@@ -384,12 +384,21 @@ impl VoiceEventHandler for Receiver {
             Ctx::VoicePacket {audio, packet, payload_offset, payload_end_pad} => {
                 // An event which fires for every received audio packet,
                 // containing the decoded data.
-                let data: &[u8] = &packet.payload.as_slice()[*payload_offset..(packet.payload.len()-payload_end_pad)];
-                let packet = OutAudio::new(&AudioData::C2S { id: 0, codec: CodecType::OpusMusic, data });
-                if let Err(e) = self.sink.send_timeout(packet, Duration::from_millis(10)).await {
-                    eprint!("Can't send voice to sender: {}",e);
-                }
+                // let data: &[u8] = &packet.payload.as_slice()[*payload_offset..(packet.payload.len()-payload_end_pad)];
+                // let packet = OutAudio::new(&AudioData::C2S { id: 0, codec: CodecType::OpusVoice, data });
+                // if let Err(e) = self.sink.send_timeout(packet, Duration::from_millis(10)).await {
+                //     eprint!("Can't send voice to sender: {}",e);
+                // }
                 if let Some(audio) = audio {
+                    {
+                        let mut lock = self.sink.lock().await;
+                        if let Some(buffer) = lock.get_mut(&packet.ssrc) {
+                            buffer.extend(audio);
+                        } else {
+                            // TODO: can we skip this clone ?
+                            let _ = lock.insert(packet.ssrc, audio.clone());
+                        }
+                    }
                     // println!("Audio packet's first 5 samples: {:?}", audio.get(..5.min(audio.len())));
                     // // println!(
                     // //     "Audio packet sequence {:05} has {:04} bytes (decompressed from {}), SSRC {}",
@@ -416,7 +425,7 @@ impl VoiceEventHandler for Receiver {
             Ctx::RtcpPacket {packet, payload_offset, payload_end_pad} => {
                 // An event which fires for every received rtcp packet,
                 // containing the call statistics and reporting information.
-                println!("RTCP packet received: {:?}", packet);
+                //println!("RTCP packet received: {:?}", packet);
             },
             Ctx::ClientConnect(
                 ClientConnect {audio_ssrc, video_ssrc, user_id, ..}

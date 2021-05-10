@@ -1,18 +1,21 @@
-use std::{collections::HashMap, env, sync::Arc};
+use std::{collections::HashMap, env, sync::Arc, time::Duration};
 use serde::Deserialize;
 use tsclientlib::{ClientId, Connection, DisconnectOptions, Identity, StreamItem};
 use tsproto_packets::packets::{AudioData, CodecType, OutAudio, OutPacket};
 use audiopus::coder::Encoder;
-use futures::prelude::*;
+use futures::{lock::Mutex, prelude::*};
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpec, AudioSpecDesired, AudioStatus};
 use sdl2::AudioSubsystem;
 use slog::{debug, info, o, Drain, Logger};
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task};
 use tokio::task::LocalSet;
 use anyhow::*;
+use tsproto_packets::packets::{Direction, InAudioBuf};
+use songbird::opus;
+
 mod ts_voice;
 mod discord;
-use tsproto_packets::packets::{Direction, InAudioBuf};
+
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct ConnectionId(u64);
@@ -55,8 +58,11 @@ struct Config {
 
 struct ListenerHolder;
 
+//TODO: stop shooting myself in the knee with a mutex
+type AudioBufferDiscord = Arc<Mutex<HashMap<u32,Vec<i16>>>>;
+
 impl TypeMapKey for ListenerHolder {
-    type Value = Arc<mpsc::Sender<OutPacket>>;
+    type Value = AudioBufferDiscord;
 }
 
 #[tokio::main]
@@ -95,8 +101,8 @@ async fn main() -> Result<()> {
         .await
         .expect("Err creating client");
 
-	let (tx,mut rx) = mpsc::channel(50);
-	let voice_pipes: Arc<mpsc::Sender<OutPacket>> = Arc::new(tx);
+	let map = HashMap::new();
+	let voice_buffer: AudioBufferDiscord = Arc::new(Mutex::new(map));
 	{
 		// Open the data lock in write mode, so keys can be inserted to it.
 		let mut data = client.data.write().await;
@@ -104,7 +110,7 @@ async fn main() -> Result<()> {
 		// The CommandCounter Value has the following type:
 		// Arc<RwLock<HashMap<String, u64>>>
 		// So, we have to insert the same type to it.
-		data.insert::<ListenerHolder>(voice_pipes);
+		data.insert::<ListenerHolder>(voice_buffer.clone());
 	}
 
     tokio::spawn(async move {
@@ -144,6 +150,17 @@ async fn main() -> Result<()> {
 	// 	a2t.set_playing(true);
 	// }
 
+	let mut interval = tokio::time::interval(Duration::from_millis(20));
+	
+	// tokio::spawn(async {
+	// 	loop {
+	// 		interval.tick().await;
+	// 		if let Err(e) = con.send_audio() {
+	// 			println!("Failed to send audio to teamspeak: {}",e);
+	// 		}
+	// 	}
+	// });
+
 	loop {
 		let t2a = audiodata.ts2a.clone();
 		let events = con.events().try_for_each(|e| async {
@@ -171,12 +188,18 @@ async fn main() -> Result<()> {
 			// 		break;
 			// 	}
 			// }
-			send_audio = rx.recv() => {
-				if let Some(packet) = send_audio {
-					con.send_audio(packet)?;
-				} else {
-					info!(logger, "Audio sending stream was canceled");
-					break;
+			// send_audio = rx.recv() => {
+			// 	tokio::time::
+			// 	if let Some(packet) = send_audio {
+			// 		con.send_audio(packet)?;
+			// 	} else {
+			// 		info!(logger, "Audio sending stream was canceled");
+			// 		break;
+			// 	}
+			// }
+			_send = interval.tick() => {
+				if let Some(processed) = process_audio(&voice_buffer).await {
+					con.send_audio(processed)?;
 				}
 			}
 			_ = tokio::signal::ctrl_c() => { break; }
@@ -192,4 +215,48 @@ async fn main() -> Result<()> {
 	con.events().for_each(|_| future::ready(())).await;
 	println!("Disconnected");
     Ok(())
+}
+
+async fn process_audio(voice_buffer: &AudioBufferDiscord) -> Option<OutPacket> {
+	let buffer_map;
+	{
+		let mut lock = voice_buffer.lock().await;
+		buffer_map = std::mem::replace(&mut *lock, HashMap::new());
+	}
+	if buffer_map.is_empty() {
+		return None;
+	}
+	let mut encoded = [0; 256];
+	let res = task::spawn_blocking(move || {
+		let start = std::time::Instant::now();
+		let mut data: Vec<i16> = Vec::new();
+		for buffer in buffer_map.values() {
+			for i in 0..buffer.len() {
+				if let Some(v) = data.get_mut(i) {
+					*v = *v + buffer[i];
+				} else {
+					data.push(buffer[i]);
+				}
+			}
+		}
+		//println!("Data size: {}",data.len());
+		let encoder = audiopus::coder::Encoder::new(
+			audiopus::SampleRate::Hz48000,
+			audiopus::Channels::Stereo,
+			audiopus::Application::Voip)
+			.expect("Can't construct encoder!");
+		
+		let length = match encoder.encode(&data, &mut encoded) {
+			Err(e) => {eprintln!("Failed to encode voice: {}",e); return None;},
+			Ok(size) => size,
+		};
+		//println!("length size: {}",length);
+		let duration = start.elapsed().as_millis();
+		if duration > 15 {
+			eprintln!("Took too {}ms for processing audio!",duration);
+		}
+		
+		Some(OutAudio::new(&AudioData::C2S { id: 0, codec: CodecType::OpusMusic, data: &encoded[..length] }))
+	}).await.expect("Join error for audio processing thread!");
+	res
 }
