@@ -217,8 +217,10 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+const STEREO_20MS: usize = 48000 * 2 * 20 / 1000;
+
 async fn process_audio(voice_buffer: &AudioBufferDiscord) -> Option<OutPacket> {
-	let buffer_map;
+	let mut buffer_map;
 	{
 		let mut lock = voice_buffer.lock().await;
 		buffer_map = std::mem::replace(&mut *lock, HashMap::new());
@@ -226,20 +228,22 @@ async fn process_audio(voice_buffer: &AudioBufferDiscord) -> Option<OutPacket> {
 	if buffer_map.is_empty() {
 		return None;
 	}
-	let mut encoded = [0; 256];
+	let mut encoded = [0; 1024];
 	let res = task::spawn_blocking(move || {
 		let start = std::time::Instant::now();
-		let mut data: Vec<i16> = Vec::new();
-		for buffer in buffer_map.values() {
+		let mut data: Vec<i16> = Vec::with_capacity(STEREO_20MS);
+		for buffer in buffer_map.values_mut() {
+			//buffer.truncate(STEREO_20MS);
 			for i in 0..buffer.len() {
 				if let Some(v) = data.get_mut(i) {
 					*v = *v + buffer[i];
 				} else {
-					data.push(buffer[i]);
+					data.extend(&buffer[i..]);
+					break;
 				}
 			}
 		}
-		//println!("Data size: {}",data.len());
+		
 		let encoder = audiopus::coder::Encoder::new(
 			audiopus::SampleRate::Hz48000,
 			audiopus::Channels::Stereo,
@@ -250,6 +254,7 @@ async fn process_audio(voice_buffer: &AudioBufferDiscord) -> Option<OutPacket> {
 			Err(e) => {eprintln!("Failed to encode voice: {}",e); return None;},
 			Ok(size) => size,
 		};
+		println!("Data size: {}/{} enc-length: {}",data.len(),STEREO_20MS,length);
 		//println!("length size: {}",length);
 		let duration = start.elapsed().as_millis();
 		if duration > 15 {

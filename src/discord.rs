@@ -365,21 +365,21 @@ impl VoiceEventHandler for Receiver {
                 // SSRCs and map the SSRC to the User ID and maintain this state.
                 // Using this map, you can map the `ssrc` in `voice_packet`
                 // to the user ID and handle their audio packets separately.
-                println!(
-                    "Speaking state update: user {:?} has SSRC {:?}, using {:?}",
-                    user_id,
-                    ssrc,
-                    speaking,
-                );
+                //println!(
+                //     "Speaking state update: user {:?} has SSRC {:?}, using {:?}",
+                //     user_id,
+                //     ssrc,
+                //     speaking,
+                // );
             },
             Ctx::SpeakingUpdate {ssrc, speaking} => {
                 // You can implement logic here which reacts to a user starting
                 // or stopping speaking.
-                println!(
-                    "Source {} has {} speaking.",
-                    ssrc,
-                    if *speaking {"started"} else {"stopped"},
-                );
+                //println!(
+                //     "Source {} has {} speaking.",
+                //     ssrc,
+                //     if *speaking {"started"} else {"stopped"},
+                // );
             },
             Ctx::VoicePacket {audio, packet, payload_offset, payload_end_pad} => {
                 // An event which fires for every received audio packet,
