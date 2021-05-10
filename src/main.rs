@@ -65,7 +65,7 @@ impl TypeMapKey for ListenerHolder {
     type Value = AudioBufferDiscord;
 }
 
-const TICK_TIME: u64 = 20;
+const TICK_TIME: u64 = 15;
 const FRAME_SIZE_MS: usize = 20;
 const STEREO_20MS: usize = 48000 * 2 * FRAME_SIZE_MS / 1000;
 
@@ -173,20 +173,20 @@ async fn main() -> Result<()> {
 	loop {
 		let t2a = audiodata.ts2a.clone();
 		let events = con.events().try_for_each(|e| async {
-			// if let StreamItem::Audio(packet) = e {
-			// 	let from = ClientId(match packet.data().data() {
-			// 		AudioData::S2C { from, .. } => *from,
-			// 		AudioData::S2CWhisper { from, .. } => *from,
-			// 		_ => panic!("Can only handle S2C packets but got a C2S packet"),
-			// 	});
-			// 	let mut t2a = t2a.lock().unwrap();
-			// 	if let Err(e) = t2a.play_packet((con_id, from), packet) {
-			// 		debug!(logger, "Failed to play packet"; "error" => %e);
-			// 	}
-			// }
+			if let StreamItem::Audio(packet) = e {
+				let from = ClientId(match packet.data().data() {
+					AudioData::S2C { from, .. } => *from,
+					AudioData::S2CWhisper { from, .. } => *from,
+					_ => panic!("Can only handle S2C packets but got a C2S packet"),
+				});
+				let mut t2a = t2a.lock().unwrap();
+				if let Err(e) = t2a.play_packet((con_id, from), packet) {
+					debug!(logger, "Failed to play packet"; "error" => %e);
+				}
+			}
 			Ok(())
 		});
-		let start = std::time::Instant::now();
+		// let start = std::time::Instant::now();
 		// Wait for ctrl + c
 		tokio::select! {
 			// send_audio = recv.recv() => {
@@ -207,10 +207,10 @@ async fn main() -> Result<()> {
 			// 	}
 			// }
 			_send = interval.tick() => {
-				let dur = start.elapsed();
-				if dur.as_millis() > TICK_TIME as u128 {
-					//eprintln!("Tick took {}ms",dur.as_millis());
-				}
+				// let dur = start.elapsed();
+				// if dur.as_millis() > TICK_TIME as u128 {
+				// 	eprintln!("Tick took {}ms",dur.as_millis());
+				// }
 				let start = std::time::Instant::now();
 				if let Some(processed) = process_audio(&voice_buffer,&encoder).await {
 					con.send_audio(processed)?;
