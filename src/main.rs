@@ -1,18 +1,13 @@
-use std::{collections::HashMap, env, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use serde::Deserialize;
 use tsclientlib::{ClientId, Connection, DisconnectOptions, Identity, StreamItem};
 use tsproto_packets::packets::{AudioData, CodecType, OutAudio, OutPacket};
 use audiopus::coder::Encoder;
 use futures::{lock::Mutex, prelude::*};
-use sdl2::audio::{AudioCallback, AudioDevice, AudioSpec, AudioSpecDesired, AudioStatus};
-use sdl2::AudioSubsystem;
-use slog::{debug, info, o, Drain, Logger};
-use tokio::{sync::mpsc, task};
+use slog::{debug, o, Drain, Logger};
+use tokio::{task};
 use tokio::task::LocalSet;
 use anyhow::*;
-use tsproto_packets::packets::{Direction, InAudioBuf};
-use songbird::opus;
-
 mod ts_voice;
 mod discord;
 
@@ -68,7 +63,8 @@ impl TypeMapKey for ListenerHolder {
 const TICK_TIME: u64 = 15;
 const FRAME_SIZE_MS: usize = 20;
 const STEREO_20MS: usize = 48000 * 2 * FRAME_SIZE_MS / 1000;
-
+/// The maximum size of an opus frame is 1275 as from RFC6716.
+const MAX_OPUS_FRAME_SIZE: usize = 1275;
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();

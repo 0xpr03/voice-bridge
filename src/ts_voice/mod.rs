@@ -4,10 +4,10 @@ use anyhow::Result;
 use slog::Logger;
 use tokio::task::LocalSet;
 
-use audio_to_ts::AudioToTs;
+
 use ts_to_audio::TsToAudio;
 
-pub mod audio_to_ts;
+
 pub mod ts_to_audio;
 
 /// The usual frame size.
@@ -16,12 +16,10 @@ pub mod ts_to_audio;
 /// This means 1920 samples and 7.5 kiB.
 const USUAL_FRAME_SIZE: usize = 48000 / 50;
 
-/// The maximum size of an opus frame is 1275 as from RFC6716.
-const MAX_OPUS_FRAME_SIZE: usize = 1275;
+
 
 #[derive(Clone)]
 pub struct AudioData {
-	pub a2ts: Arc<Mutex<AudioToTs>>,
 	pub ts2a: Arc<Mutex<TsToAudio>>,
 }
 
@@ -35,7 +33,7 @@ pub fn start(logger: Logger, local_set: &LocalSet) -> Result<AudioData> {
 	}
 
 	let ts2a = TsToAudio::new(logger.clone(), audio_subsystem.clone(), local_set)?;
-	let a2ts = AudioToTs::new(logger.clone(), audio_subsystem, local_set)?;
+	
 
-	Ok(AudioData { a2ts, ts2a })
+	Ok(AudioData { ts2a })
 }
