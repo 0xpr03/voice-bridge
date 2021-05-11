@@ -11,6 +11,8 @@ use tokio_stream::wrappers::IntervalStream;
 use tsclientlib::ClientId;
 use tsproto_packets::packets::InAudioBuf;
 
+// Example from tsclientlib, to be removed later on
+
 use super::*;
 use crate::ConnectionId;
 
@@ -95,7 +97,7 @@ impl TsToAudio {
 				}
 				future::ready(())
 			}),
-		);
+		); 
 	}
 
 	pub(crate) fn play_packet(&mut self, id: Id, packet: InAudioBuf) -> Result<()> {

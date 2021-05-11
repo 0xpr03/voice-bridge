@@ -175,10 +175,11 @@ async fn main() -> Result<()> {
 					AudioData::S2CWhisper { from, .. } => *from,
 					_ => panic!("Can only handle S2C packets but got a C2S packet"),
 				});
-				let mut t2a = t2a.lock().unwrap();
-				if let Err(e) = t2a.play_packet((con_id, from), packet) {
-					debug!(logger, "Failed to play packet"; "error" => %e);
-				}
+				
+				// let mut t2a = t2a.lock().unwrap();
+				// if let Err(e) = t2a.play_packet((con_id, from), packet) {
+				// 	debug!(logger, "Failed to play packet"; "error" => %e);
+				// }
 			}
 			Ok(())
 		});
