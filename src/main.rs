@@ -70,7 +70,7 @@ impl Read for TsToDiscordPipeline {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
 		let len = buf.len() / size_of::<f32>();
 		let mut wtr: Vec<f32> = vec![0.0; len];
-		// TODO: can't we support async read for songbird ? this is kinda bad..
+		// TODO: can't we support async read for songbird ? this is kinda bad as it requires a sync mutex
 		{
 			let mut lock = self.data.lock().expect("Can't lock ts voice buffer!");
 
