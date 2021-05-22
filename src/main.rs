@@ -271,6 +271,7 @@ async fn process_discord_audio(voice_buffer: &AudioBufferDiscord, encoder: &Arc<
 		}
 		
 		// encode back to opus
+		// this should never block, thus we don't fail gracefully for it
 		let lock = encoder_c.try_lock().expect("Can't reach encoder!");
 		let length = match lock.encode(&data, &mut encoded) {
 			Err(e) => {eprintln!("Failed to encode voice: {}",e); return None;},
