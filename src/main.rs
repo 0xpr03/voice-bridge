@@ -194,31 +194,9 @@ async fn main() -> Result<()> {
 			}
 			Ok(())
 		});
-		// let start = std::time::Instant::now();
 		// Wait for ctrl + c
 		tokio::select! {
-			// send_audio = recv.recv() => {
-			// 	if let Some(packet) = send_audio {
-			// 		con.send_audio(packet)?;
-			// 	} else {
-			// 		info!(logger, "Audio sending stream was canceled");
-			// 		break;
-			// 	}
-			// }
-			// send_audio = rx.recv() => {
-			// 	tokio::time::
-			// 	if let Some(packet) = send_audio {
-			// 		con.send_audio(packet)?;
-			// 	} else {
-			// 		info!(logger, "Audio sending stream was canceled");
-			// 		break;
-			// 	}
-			// }
 			_send = interval.tick() => {
-				// let dur = start.elapsed();
-				// if dur.as_millis() > TICK_TIME as u128 {
-				// 	eprintln!("Tick took {}ms",dur.as_millis());
-				// }
 				let start = std::time::Instant::now();
 				if let Some(processed) = process_audio(&discord_voice_buffer,&encoder).await {
 					con.send_audio(processed)?;
