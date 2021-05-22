@@ -12,7 +12,7 @@ use serenity::prelude::Mentionable;
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
 // The voice client can be retrieved in any command using `songbird::get(ctx).await`.
-use songbird::SerenityInit;
+use songbird::{SerenityInit, input::Input};
 
 // Import the `Context` to handle commands.
 use serenity::client::Context;
@@ -123,12 +123,16 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
     if let Ok(_) = conn_result {
         // NOTE: this skips listening for the actual connection result.
         let channel: crate::AudioBufferDiscord;
+        let ts_buffer: crate::TsToDiscordPipeline;
         {
             let data_read = ctx.data.read().await;
-            channel = data_read.get::<ListenerHolder>().expect("Expected CommandCounter in TypeMap.").clone();
+            let (ts_buf,chan) = data_read.get::<ListenerHolder>().expect("Expected CommandCounter in TypeMap.").clone();
+            channel = chan;
+            ts_buffer = ts_buf;
         }
         let mut handler = handler_lock.lock().await;
-
+        let discord_input = Input::float_pcm(true, songbird::input::Reader::Extension(Box::new(ts_buffer.clone())));
+        handler.play_only_source(discord_input);
         handler.add_global_event(
             CoreEvent::SpeakingStateUpdate.into(),
             Receiver::new(channel.clone()),
@@ -395,7 +399,7 @@ impl VoiceEventHandler for Receiver {
                         let mut lock = self.sink.lock().await;
                         let dur = time.elapsed();
                         if dur.as_millis() > 1 {
-                            eprintln!("Akquiring lock took {}ms",dur.as_millis());
+                            eprintln!("Acquiring lock took {}ms",dur.as_millis());
                         }
                         if let Some(buffer) = lock.get_mut(&packet.ssrc) {
                             buffer.extend(audio);

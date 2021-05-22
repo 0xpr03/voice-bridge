@@ -10,6 +10,9 @@ edition = "2018"
 toml = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 
+# pushing [f32] to [u8] and vice verca
+byte-slice-cast = "1"
+
 # tokio tracing from songbird
 tracing = "0.1"
 tracing-subscriber = "0.2"
@@ -53,4 +56,4 @@ features = ["client", "standard_framework", "voice","native_tls_backend"]
 
 [dependencies.tokio]
 version = "1.0"
-features = ["macros", "rt-multi-thread","signal"]
+features = ["macros", "rt-multi-thread","signal", "sync"]
