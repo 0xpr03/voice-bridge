@@ -1,3 +1,5 @@
+//! Discord handler
+
 use serde::Deserialize;
 use serenity::prelude::Mentionable;
 
@@ -377,11 +379,6 @@ impl VoiceEventHandler for Receiver {
             Ctx::VoicePacket {audio, packet, payload_offset, payload_end_pad} => {
                 // An event which fires for every received audio packet,
                 // containing the decoded data.
-                // let data: &[u8] = &packet.payload.as_slice()[*payload_offset..(packet.payload.len()-payload_end_pad)];
-                // let packet = OutAudio::new(&AudioData::C2S { id: 0, codec: CodecType::OpusVoice, data });
-                // if let Err(e) = self.sink.send_timeout(packet, Duration::from_millis(10)).await {
-                //     eprint!("Can't send voice to sender: {}",e);
-                // }
                 if let Some(audio) = audio {
                     {
                         let time = std::time::Instant::now();
@@ -397,25 +394,6 @@ impl VoiceEventHandler for Receiver {
                             let _ = lock.insert(packet.ssrc, audio.clone());
                         }
                     }
-                    // println!("Audio packet's first 5 samples: {:?}", audio.get(..5.min(audio.len())));
-                    // // println!(
-                    // //     "Audio packet sequence {:05} has {:04} bytes (decompressed from {}), SSRC {}",
-                    // //     packet.sequence.0,
-                    // //     audio.len() * std::mem::size_of::<i16>(),
-                    // //     packet.payload.len(),
-                    // //     packet.ssrc,
-                    // // );
-                    // let mut values_converted = Vec::with_capacity(2*audio.len());
-                    // for value in audio {
-                    //     // maybe "be" ?
-                    //     // TODO: we could optimize this, data isn't directly used
-                    //     values_converted.extend(&value.to_le_bytes());
-                    // }
-                    // let packet =
-					// OutAudio::new(&AudioData::C2S { id: 0, codec: CodecType::OpusMusic, data: &values_converted });
-                    // if let Err(e) = self.sink.send_timeout(packet, Duration::from_millis(10)).await {
-                    //     eprint!("Can't send voice to sender: {}",e);
-                    // }
                 } else {
                     println!("RTP packet, but no audio. Driver may not be configured to decode.");
                 }
