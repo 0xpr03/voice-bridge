@@ -68,14 +68,16 @@ impl TsToDiscordPipeline {
 
 impl Read for TsToDiscordPipeline {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-		// TODO: can't we support async read for songbird ? this is kinda bad..
-        let mut lock = self.data.lock().expect("Can't lock ts voice buffer!");
-
-		// and this is really ugly.. read only works for u8, but we get an f32 and need to convert that without changing AudioHandlers API
-		// also Read for stuff that specifies to use f32 is kinda meh
 		let len = buf.len() / size_of::<f32>();
 		let mut wtr: Vec<f32> = vec![0.0; len];
-		lock.fill_buffer(wtr.as_mut_slice());
+		// TODO: can't we support async read for songbird ? this is kinda bad..
+		{
+			let mut lock = self.data.lock().expect("Can't lock ts voice buffer!");
+
+			// and this is really ugly.. read only works for u8, but we get an f32 and need to convert that without changing AudioHandlers API
+			// also Read for stuff that specifies to use f32 is kinda meh			
+			lock.fill_buffer(wtr.as_mut_slice());
+		}
 		let slice = wtr.as_byte_slice();
 		buf.copy_from_slice(slice);
 
@@ -129,7 +131,7 @@ async fn main() -> Result<()> {
         .expect("Err creating client");
 
 	let ts_voice_logger = logger.new(o!("pipeline" => "voice-ts"));
-	let teamspeak_voice_handler = TsToDiscordPipeline::new(logger);
+	let teamspeak_voice_handler = TsToDiscordPipeline::new(ts_voice_logger);
 
 	let map = HashMap::new();
 	let discord_voice_buffer: AudioBufferDiscord = Arc::new(Mutex::new(map));
@@ -188,8 +190,7 @@ async fn main() -> Result<()> {
 				
 				let mut ts_voice: std::sync::MutexGuard<TsAudioHandler> = teamspeak_voice_handler.data.lock().expect("Can't lock ts audio buffer!");
 				if let Err(e) = ts_voice.handle_packet((con_id, from), packet) {
-					//debug!(logger, "Failed to play packet"; "error" => %e);
-					eprintln!("Failed to play TS_Voice packet {}",e);
+					debug!(logger, "Failed to play TS_Voice packet"; "error" => %e);
 				}
 			}
 			Ok(())
