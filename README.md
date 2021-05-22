@@ -1,12 +1,8 @@
-# SDL setup
-See [sdl2 crate](https://crates.io/crates/sdl2)
-## windows
-For Rustup users, this folder will be in
+# Teamspeak3 <-> Discord Voice Bridge
 
-    C:\Users\{Your Username}\.rustup\toolchains\{current toolchain}\lib\rustlib\{current toolchain}\lib
+Requires your own discord bot token.
 
-Copy SDL2.dll from
+## Starting
+Setup your credentials inside .credentials.toml
 
-    SDL2-devel-2.0.x-VC\SDL2-2.0.x\lib\x64\
-
-into your cargo project, right next to your Cargo.toml
+Then join a voice channel, type ~join in a text channel the bot can access.

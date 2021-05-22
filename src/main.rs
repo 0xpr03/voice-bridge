@@ -71,7 +71,7 @@ impl Read for TsToDiscordPipeline {
 		// TODO: can't we support async read for songbird ? this is kinda bad..
         let mut lock = self.data.lock().expect("Can't lock ts voice buffer!");
 
-		// and this is really ugly.. read only works for u8, but we get an f32 and need to convert that without chaning AudioHandlers API
+		// and this is really ugly.. read only works for u8, but we get an f32 and need to convert that without changing AudioHandlers API
 		// also Read for stuff that specifies to use f32 is kinda meh
 		let len = buf.len() / size_of::<f32>();
 		let mut wtr: Vec<f32> = vec![0.0; len];
