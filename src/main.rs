@@ -253,9 +253,11 @@ async fn process_discord_audio(voice_buffer: &AudioBufferDiscord, encoder: &Arc<
 	}
 	let mut encoded = [0; 1024];
 	let encoder_c = encoder.clone();
+	// don't block the async runtime
 	let res = task::spawn_blocking(move || {
 		let start = std::time::Instant::now();
 		let mut data: Vec<i16> = Vec::with_capacity(STEREO_20MS);
+		// merge all audio buffers (clients) to one
 		for buffer in buffer_map.values_mut() {
 			//buffer.truncate(STEREO_20MS);
 			for i in 0..buffer.len() {
@@ -268,7 +270,7 @@ async fn process_discord_audio(voice_buffer: &AudioBufferDiscord, encoder: &Arc<
 			}
 		}
 		
-		
+		// encode back to opus
 		let lock = encoder_c.try_lock().expect("Can't reach encoder!");
 		let length = match lock.encode(&data, &mut encoded) {
 			Err(e) => {eprintln!("Failed to encode voice: {}",e); return None;},
@@ -276,11 +278,12 @@ async fn process_discord_audio(voice_buffer: &AudioBufferDiscord, encoder: &Arc<
 		};
 		//println!("Data size: {}/{} enc-length: {}",data.len(),STEREO_20MS,length);
 		//println!("length size: {}",length);
+		// warn on high encoding times
 		let duration = start.elapsed().as_millis();
-		if duration > 15 {
+		if duration > 5 {
 			eprintln!("Took too {}ms for processing audio!",duration);
 		}
-		
+		// package into teamspeak audio structure
 		Some(OutAudio::new(&AudioData::C2S { id: 0, codec: CodecType::OpusMusic, data: &encoded[..length] }))
 	}).await.expect("Join error for audio processing thread!");
 	res
