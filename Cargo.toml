@@ -20,7 +20,6 @@ tracing-futures = "0.2"
 
 ### TS stuff
 audiopus = "0.2"
-sdl2 = "0.34"
 futures = "0.3"
 # we use the ts slog stuff for the code copied
 slog = "2"

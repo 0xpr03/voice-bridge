@@ -1,18 +1,15 @@
-use std::{collections::HashMap, io::{Read, copy}, mem::size_of, sync::Arc, time::Duration};
-use byte_slice_cast::{AsByteSlice, AsMutByteSlice};
+use std::{collections::HashMap, io::Read, mem::size_of, sync::Arc, time::Duration};
+use byte_slice_cast::AsByteSlice;
 use serde::Deserialize;
-use tsclientlib::{ClientId, Connection, DisconnectOptions, Identity, StreamItem, audio::AudioHandler};
+use tsclientlib::{ClientId, Connection, DisconnectOptions, Identity, StreamItem};
 use tsproto_packets::packets::{AudioData, CodecType, OutAudio, OutPacket};
 use audiopus::coder::Encoder;
 use futures::prelude::*;
 use slog::{debug, o, Drain, Logger};
 use tokio::task;
-use tokio::task::LocalSet;
 use tokio::sync::Mutex;
 use anyhow::*;
 
-
-mod ts_voice;
 mod discord;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -21,24 +18,17 @@ struct ConnectionId(u64);
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
 // The voice client can be retrieved in any command using `songbird::get(ctx).await`.
-use songbird::{SerenityInit, Songbird, input::Input};
+use songbird::{SerenityInit, Songbird};
 use songbird::driver::{Config as DriverConfig, DecodeMode};
 
 // Import the `Context` to handle commands.
-use serenity::{client::Context, prelude::{RwLock, TypeMapKey}};
+use serenity::{prelude::{TypeMapKey}};
 
 use serenity::{
-    async_trait,
-    client::{Client, EventHandler},
+    client::{Client},
     framework::{
         StandardFramework,
-        standard::{
-            Args, CommandResult,
-            macros::{command, group},
-        },
     },
-    model::{channel::Message, gateway::Ready},
-    Result as SerenityResult,
 };
 
 

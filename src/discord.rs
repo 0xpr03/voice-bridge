@@ -1,27 +1,18 @@
-use std::{env, sync::Arc, time::Duration};
 use serde::Deserialize;
-use tokio::sync::mpsc;
-use tsclientlib::{ClientId, Connection, DisconnectOptions, Identity, StreamItem};
-use tsproto_packets::packets::{AudioData, CodecType, Direction, OutAudio, OutPacket};
-use audiopus::coder::Encoder;
-use futures::prelude::*;
-use sdl2::audio::{AudioCallback, AudioDevice, AudioSpec, AudioSpecDesired, AudioStatus};
-use sdl2::AudioSubsystem;
 use serenity::prelude::Mentionable;
 
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
 // The voice client can be retrieved in any command using `songbird::get(ctx).await`.
-use songbird::{SerenityInit, input::Input};
+use songbird::input::Input;
 
 // Import the `Context` to handle commands.
 use serenity::client::Context;
 
 use serenity::{
     async_trait,
-    client::{Client, EventHandler},
+    client::{EventHandler},
     framework::{
-        StandardFramework,
         standard::{
             Args, CommandResult,
             macros::{command, group},
@@ -31,13 +22,11 @@ use serenity::{
     Result as SerenityResult,
 };
 use songbird::{
-    driver::{Config as DriverConfig, DecodeMode},
     model::payload::{ClientConnect, ClientDisconnect, Speaking},
     CoreEvent,
     Event,
     EventContext,
     EventHandler as VoiceEventHandler,
-    Songbird,
 };
 
 use crate::ListenerHolder;
