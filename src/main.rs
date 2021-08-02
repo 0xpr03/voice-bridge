@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 use anyhow::*;
 
 mod discord;
+mod discord_audiohandler;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct ConnectionId(u64);
@@ -47,7 +48,7 @@ struct Config {
 struct ListenerHolder;
 
 //TODO: stop shooting myself in the knee with a mutex
-type AudioBufferDiscord = Arc<Mutex<HashMap<u32,Vec<i16>>>>;
+type AudioBufferDiscord = Arc<Mutex<discord_audiohandler::AudioHandler<u32>>>;
 
 
 type TsVoiceId = (ConnectionId, ClientId);
@@ -93,7 +94,12 @@ impl TypeMapKey for ListenerHolder {
 /// We want to run every 20ms, but we only get ~1ms correctness
 const TICK_TIME: u64 = 18;
 const FRAME_SIZE_MS: usize = 20;
-const STEREO_20MS: usize = 48000 * 2 * FRAME_SIZE_MS / 1000;
+const SAMPLE_RATE: usize = 48000;
+const STEREO_20MS: usize = SAMPLE_RATE * 2 * FRAME_SIZE_MS / 1000;
+// const STEREO_20MS_FLOAT: usize = SAMPLE_RATE / 20;
+/// See http://blog.bjornroche.com/2009/12/int-float-int-its-jungle-out-there.html
+/// We use i16::MIN here, which is 0x8000
+const I16_CONVERSION_DIVIDER: f32 = 0x8000 as f32;
 /// The maximum size of an opus frame is 1275 as from RFC6716.
 const MAX_OPUS_FRAME_SIZE: usize = 1275;
 #[tokio::main]
@@ -137,8 +143,8 @@ async fn main() -> Result<()> {
 	let teamspeak_voice_handler = TsToDiscordPipeline::new(ts_voice_logger);
 
 	// init discord -> teamspeak pipeline
-	let map = HashMap::new();
-	let discord_voice_buffer: AudioBufferDiscord = Arc::new(Mutex::new(map));
+	let discord_voice_logger = logger.new(o!("pipeline" => "voice-discord"));
+	let discord_voice_buffer: AudioBufferDiscord = Arc::new(Mutex::new(discord_audiohandler::AudioHandler::new(discord_voice_logger)));
 	// stuff discord -> teamspeak pipeline into discord context for retrieval inside the client
 	{
 		// Open the data lock in write mode, so keys can be inserted to it.
@@ -206,7 +212,7 @@ async fn main() -> Result<()> {
 				let mut ts_voice: std::sync::MutexGuard<TsAudioHandler> = teamspeak_voice_handler.data.lock().expect("Can't lock ts audio buffer!");
 				// feed mixer+jitter buffer, consumed by discord
 				if let Err(e) = ts_voice.handle_packet((con_id, from), packet) {
-					debug!(logger, "Failed to play TS_Voice packet"; "error" => %e);
+					debug!(logger, "Failed to handle TS_Voice packet"; "error" => %e);
 				}
 			}
 			Ok(())
@@ -243,37 +249,26 @@ async fn main() -> Result<()> {
 /// Create an audio frame for consumption by teamspeak.
 /// Merges all streams and converts them to opus
 async fn process_discord_audio(voice_buffer: &AudioBufferDiscord, encoder: &Arc<Mutex<Encoder>>) -> Option<OutPacket> {
-	let mut buffer_map;
+	// let mut buffer_map;
+	// {
+	// 	let mut lock = voice_buffer.lock().await;
+	// 	buffer_map = std::mem::replace(&mut *lock, HashMap::new());
+	// }
+
+	let mut data = [0.0; STEREO_20MS];
 	{
 		let mut lock = voice_buffer.lock().await;
-		buffer_map = std::mem::replace(&mut *lock, HashMap::new());
-	}
-	if buffer_map.is_empty() {
-		return None;
+		lock.fill_buffer(&mut data);
 	}
 	let mut encoded = [0; 1024];
 	let encoder_c = encoder.clone();
 	// don't block the async runtime
 	let res = task::spawn_blocking(move || {
-		let start = std::time::Instant::now();
-		let mut data: Vec<i16> = Vec::with_capacity(STEREO_20MS);
-		// merge all audio buffers (clients) to one
-		for buffer in buffer_map.values_mut() {
-			//buffer.truncate(STEREO_20MS);
-			for i in 0..buffer.len() {
-				if let Some(v) = data.get_mut(i) {
-					*v = *v + buffer[i];
-				} else {
-					data.extend(&buffer[i..]);
-					break;
-				}
-			}
-		}
-		
+		let start = std::time::Instant::now();		
 		// encode back to opus
 		// this should never block, thus we don't fail gracefully for it
 		let lock = encoder_c.try_lock().expect("Can't reach encoder!");
-		let length = match lock.encode(&data, &mut encoded) {
+		let length = match lock.encode_float(&data, &mut encoded) {
 			Err(e) => {eprintln!("Failed to encode voice: {}",e); return None;},
 			Ok(size) => size,
 		};
@@ -281,7 +276,7 @@ async fn process_discord_audio(voice_buffer: &AudioBufferDiscord, encoder: &Arc<
 		//println!("length size: {}",length);
 		// warn on high encoding times
 		let duration = start.elapsed().as_millis();
-		if duration > 5 {
+		if duration > 2 {
 			eprintln!("Took too {}ms for processing audio!",duration);
 		}
 		// package into teamspeak audio structure

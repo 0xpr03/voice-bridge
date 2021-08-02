@@ -3,6 +3,7 @@
 use serde::Deserialize;
 use serenity::prelude::Mentionable;
 
+use slog::error;
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
 // The voice client can be retrieved in any command using `songbird::get(ctx).await`.
@@ -30,8 +31,9 @@ use songbird::{
     EventContext,
     EventHandler as VoiceEventHandler,
 };
+use tsproto_packets::packets::{Direction, InAudioBuf};
 
-use crate::ListenerHolder;
+use crate::{I16_CONVERSION_DIVIDER, ListenerHolder};
 
 pub(crate) struct Handler;
 
@@ -378,24 +380,21 @@ impl VoiceEventHandler for Receiver {
             },
             Ctx::VoicePacket {audio, packet, payload_offset, payload_end_pad} => {
                 // An event which fires for every received audio packet,
-                // containing the decoded data.
-                if let Some(audio) = audio {
-                    {
-                        let time = std::time::Instant::now();
-                        let mut lock = self.sink.lock().await;
-                        let dur = time.elapsed();
-                        if dur.as_millis() > 1 {
-                            eprintln!("Acquiring lock took {}ms",dur.as_millis());
-                        }
-                        if let Some(buffer) = lock.get_mut(&packet.ssrc) {
-                            buffer.extend(audio);
-                        } else {
-                            // TODO: can we skip this clone ?
-                            let _ = lock.insert(packet.ssrc, audio.clone());
-                        }
+
+                // get raw opus package, we don't decode here and leave that to the AudioHandler
+                let last_bytes = packet.payload.len() - payload_end_pad;
+                let opus_slice = &packet.payload[*payload_offset..last_bytes];
+                let dur;
+                {
+                    let time = std::time::Instant::now();
+                    let mut lock = self.sink.lock().await;
+                    dur = time.elapsed();
+                    if let Err(e) = lock.handle_packet(packet.ssrc, packet.sequence.0.0, opus_slice.to_vec()) {
+                        eprintln!("Failed to handle Discord voice packet: {}",e);
                     }
-                } else {
-                    println!("RTP packet, but no audio. Driver may not be configured to decode.");
+                }
+                if dur.as_millis() > 1 {
+                    eprintln!("Acquiring lock took {}ms",dur.as_millis());
                 }
             },
             Ctx::RtcpPacket {packet, payload_offset, payload_end_pad} => {
