@@ -17,7 +17,7 @@ use std::hash::Hash;
 
 use audiopus::coder::Decoder;
 use audiopus::{packet, Channels, SampleRate};
-use slog::{debug, o, trace, warn, Logger};
+use slog::{Logger, debug, info, o, trace, warn};
 use tsclientlib::audio::Error;
 use tsproto_packets::packets::{AudioData, CodecType, InAudioBuf};
 
@@ -244,7 +244,7 @@ impl AudioQueue {
 	}
 
 	fn decode_packet(&mut self, packet: Option<&QueuePacket>, fec: bool) -> Result<()> {
-		trace!(self.logger, "Decoding packet"; "has_packet" => packet.is_some(), "fec" => fec);
+		debug!(self.logger, "Decoding packet"; "has_packet" => packet.is_some(), "fec" => fec);
 		let packet_data;
 		let len;
 		if let Some(p) = packet {
@@ -347,7 +347,7 @@ impl AudioQueue {
 						cur_id
 					);
 					// Packet loss
-					debug!(self.logger, "Audio packet loss"; "need" => cur_id, "have" => packet.id);
+					info!(self.logger, "Audio packet loss"; "need" => cur_id, "have" => packet.id);
 					if packet.id == self.next_id {
 						// Can use forward-error-correction
 						self.decode_packet(Some(&packet), true)?;

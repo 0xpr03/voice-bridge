@@ -1,7 +1,11 @@
 //! Discord handler
 
+use std::sync::Arc;
+
+use audiopus::{Channels, SampleRate};
+use audiopus::coder::Decoder;
 use serde::Deserialize;
-use serenity::prelude::Mentionable;
+use serenity::prelude::{Mentionable, Mutex};
 
 use slog::error;
 // This trait adds the `register_songbird` and `register_songbird_with` methods
@@ -24,6 +28,8 @@ use serenity::{
     model::{channel::Message, gateway::Ready},
     Result as SerenityResult,
 };
+use songbird::packet::PacketSize;
+use songbird::packet::rtp::RtpExtensionPacket;
 use songbird::{
     model::payload::{ClientConnect, ClientDisconnect, Speaking},
     CoreEvent,
@@ -330,6 +336,7 @@ fn check_msg(result: SerenityResult<Message>) {
 
 struct Receiver{
     sink: crate::AudioBufferDiscord,
+    decoder: Arc<Mutex<Decoder>>,
 }
 
 impl Receiver {
@@ -338,6 +345,7 @@ impl Receiver {
         // you can later store them in intervals.
         Self {
             sink: voice_receiver,
+            decoder: Arc::new(Mutex::new(Decoder::new(SampleRate::Hz48000, Channels::Stereo).unwrap()))
         }
     }
 }
@@ -383,19 +391,38 @@ impl VoiceEventHandler for Receiver {
 
                 // get raw opus package, we don't decode here and leave that to the AudioHandler
                 let last_bytes = packet.payload.len() - payload_end_pad;
-                let opus_slice = &packet.payload[*payload_offset..last_bytes];
+                let data = &packet.payload[*payload_offset..last_bytes];
+                let start = if packet.extension != 0 {
+                    match RtpExtensionPacket::new(data) {
+                        Some(v) => v.packet_size(),
+                        None => {
+                            eprintln!("Extension packet indicated, but insufficient space.");
+                            return None;
+                        }
+                    }
+                } else {
+                    0
+                };
+                let opus_slice = &data[start..];
                 let dur;
                 {
-                    let time = std::time::Instant::now();
-                    let mut lock = self.sink.lock().await;
-                    dur = time.elapsed();
-                    if let Err(e) = lock.handle_packet(packet.ssrc, packet.sequence.0.0, opus_slice.to_vec()) {
-                        eprintln!("Failed to handle Discord voice packet: {}",e);
+                    let mut lock_decoder = self.decoder.lock().await;
+                    let mut decoded: [i16; 48000 *2 ] = [0; 48000 * 2];
+                    if let Err(e) = lock_decoder.decode(Some(opus_slice), &mut decoded[..], false) {
+                        eprintln!("Failed to handle Discord voice packet: {:?}",e);
+                    } else {
+                        let time = std::time::Instant::now();
+                        let mut lock = self.sink.lock().await;
+                        dur = time.elapsed();
+                        if let Err(e) = lock.handle_packet(packet.ssrc, packet.sequence.0.0, opus_slice.to_vec()) {
+                            eprintln!("Failed to handle Discord voice packet: {}",e);
+                        }
+                        if dur.as_millis() > 1 {
+                            eprintln!("Acquiring lock took {}ms",dur.as_millis());
+                        }
                     }
                 }
-                if dur.as_millis() > 1 {
-                    eprintln!("Acquiring lock took {}ms",dur.as_millis());
-                }
+                
             },
             Ctx::RtcpPacket {packet, payload_offset, payload_end_pad} => {
                 // An event which fires for every received rtcp packet,

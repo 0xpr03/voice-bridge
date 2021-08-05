@@ -92,7 +92,7 @@ impl TypeMapKey for ListenerHolder {
 
 /// teamspeak audio fragment timer
 /// We want to run every 20ms, but we only get ~1ms correctness
-const TICK_TIME: u64 = 18;
+const TICK_TIME: u64 = 20;
 const FRAME_SIZE_MS: usize = 20;
 const SAMPLE_RATE: usize = 48000;
 const STEREO_20MS: usize = SAMPLE_RATE * 2 * FRAME_SIZE_MS / 1000;
@@ -104,6 +104,7 @@ const I16_CONVERSION_DIVIDER: f32 = 0x8000 as f32;
 const MAX_OPUS_FRAME_SIZE: usize = 1275;
 #[tokio::main]
 async fn main() -> Result<()> {
+	dbg!(STEREO_20MS);
     tracing_subscriber::fmt::init();
 	// init logging stuff used by tsclientlib
     let config: Config = toml::from_str(&std::fs::read_to_string(".credentials.toml").unwrap()).unwrap();
@@ -127,7 +128,7 @@ async fn main() -> Result<()> {
     let songbird = Songbird::serenity();
     songbird.set_config(
         DriverConfig::default()
-            .decode_mode(DecodeMode::Decode)
+            .decode_mode(DecodeMode::Decrypt)
     );
 
 	// init discord client
@@ -255,12 +256,12 @@ async fn process_discord_audio(voice_buffer: &AudioBufferDiscord, encoder: &Arc<
 	// 	buffer_map = std::mem::replace(&mut *lock, HashMap::new());
 	// }
 
-	let mut data = [0.0; STEREO_20MS];
+	let mut data = [0.0; 1920];
 	{
 		let mut lock = voice_buffer.lock().await;
 		lock.fill_buffer(&mut data);
 	}
-	let mut encoded = [0; 1024];
+	let mut encoded = [0; 1920];
 	let encoder_c = encoder.clone();
 	// don't block the async runtime
 	let res = task::spawn_blocking(move || {
