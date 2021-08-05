@@ -406,20 +406,14 @@ impl VoiceEventHandler for Receiver {
                 let opus_slice = &data[start..];
                 let dur;
                 {
-                    let mut lock_decoder = self.decoder.lock().await;
-                    let mut decoded: [i16; 48000 *2 ] = [0; 48000 * 2];
-                    if let Err(e) = lock_decoder.decode(Some(opus_slice), &mut decoded[..], false) {
-                        eprintln!("Failed to handle Discord voice packet: {:?}",e);
-                    } else {
-                        let time = std::time::Instant::now();
-                        let mut lock = self.sink.lock().await;
-                        dur = time.elapsed();
-                        if let Err(e) = lock.handle_packet(packet.ssrc, packet.sequence.0.0, opus_slice.to_vec()) {
-                            eprintln!("Failed to handle Discord voice packet: {}",e);
-                        }
-                        if dur.as_millis() > 1 {
-                            eprintln!("Acquiring lock took {}ms",dur.as_millis());
-                        }
+                    let time = std::time::Instant::now();
+                    let mut lock = self.sink.lock().await;
+                    dur = time.elapsed();
+                    if let Err(e) = lock.handle_packet(packet.ssrc, packet.sequence.0.0, opus_slice.to_vec()) {
+                        eprintln!("Failed to handle Discord voice packet: {}",e);
+                    }
+                    if dur.as_millis() > 1 {
+                        eprintln!("Acquiring lock took {}ms",dur.as_millis());
                     }
                 }
                 
