@@ -11,6 +11,10 @@ Then run `cargo build --release`
 .exe/elf is inside target/release/
 You can also run `cargo run --release` instead to directly build & execute the resulting binary.
 
+### Build optimization
+
+The default release build is heavily optimized, using native target-cpu instructions and LTO. You can disable LTO in the Cargo.toml under `[profile.release]`, which can reduce the build time by a lot. And you can disable the target-cpu flags in `.cargo/config.toml`.
+
 ## Starting
 Setup your credentials inside .credentials.toml by copying credentials.example.toml
 
