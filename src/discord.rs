@@ -1,11 +1,7 @@
 //! Discord handler
 
-use std::sync::Arc;
-
-use audiopus::{Channels, SampleRate};
-use audiopus::coder::Decoder;
 use serde::Deserialize;
-use serenity::prelude::{Mentionable, Mutex};
+use serenity::prelude::Mentionable;
 
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
@@ -334,7 +330,6 @@ fn check_msg(result: SerenityResult<Message>) {
 
 struct Receiver{
     sink: crate::AudioBufferDiscord,
-    decoder: Arc<Mutex<Decoder>>,
 }
 
 impl Receiver {
@@ -343,7 +338,6 @@ impl Receiver {
         // you can later store them in intervals.
         Self {
             sink: voice_receiver,
-            decoder: Arc::new(Mutex::new(Decoder::new(SampleRate::Hz48000, Channels::Stereo).unwrap()))
         }
     }
 }
