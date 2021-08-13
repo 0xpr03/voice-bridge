@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Read, mem::size_of, sync::Arc, time::Duration};
+use std::{io::Read, mem::size_of, sync::Arc, time::Duration};
 use byte_slice_cast::AsByteSlice;
 use serde::Deserialize;
 use tsclientlib::{ClientId, Connection, DisconnectOptions, Identity, StreamItem};
@@ -96,10 +96,6 @@ const TICK_TIME: u64 = 20;
 const FRAME_SIZE_MS: usize = 20;
 const SAMPLE_RATE: usize = 48000;
 const STEREO_20MS: usize = SAMPLE_RATE * 2 * FRAME_SIZE_MS / 1000;
-// const STEREO_20MS_FLOAT: usize = SAMPLE_RATE / 20;
-/// See http://blog.bjornroche.com/2009/12/int-float-int-its-jungle-out-there.html
-/// We use i16::MIN here, which is 0x8000
-const I16_CONVERSION_DIVIDER: f32 = 0x8000 as f32;
 /// The maximum size of an opus frame is 1275 as from RFC6716.
 const MAX_OPUS_FRAME_SIZE: usize = 1275;
 #[tokio::main]
@@ -256,12 +252,12 @@ async fn process_discord_audio(voice_buffer: &AudioBufferDiscord, encoder: &Arc<
 	// 	buffer_map = std::mem::replace(&mut *lock, HashMap::new());
 	// }
 
-	let mut data = [0.0; 1920];
+	let mut data = [0.0; STEREO_20MS];
 	{
 		let mut lock = voice_buffer.lock().await;
 		lock.fill_buffer(&mut data);
 	}
-	let mut encoded = [0; 1920];
+	let mut encoded = [0; MAX_OPUS_FRAME_SIZE];
 	let encoder_c = encoder.clone();
 	// don't block the async runtime
 	let res = task::spawn_blocking(move || {

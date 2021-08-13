@@ -19,7 +19,6 @@ use audiopus::coder::Decoder;
 use audiopus::{packet, Channels, SampleRate};
 use slog::{Logger, debug, info, o, trace, warn};
 use tsclientlib::audio::Error;
-use tsproto_packets::packets::{AudioData, CodecType, InAudioBuf};
 
 use crate::ClientId;
 
@@ -168,9 +167,6 @@ impl AudioQueue {
 		res.add_packet(sequence, packet)?;
 		Ok(res)
 	}
-
-	pub fn get_decoder(&self) -> &Decoder { &self.decoder }
-	pub fn is_whispering(&self) -> bool { self.whispering }
 
 	/// Size is in samples.
 	fn add_buffer_size(&mut self, size: usize) {
@@ -417,9 +413,6 @@ impl<Id: Clone + Debug + Eq + Hash + PartialEq> AudioHandler<Id> {
 
 	/// Delete all queues
 	pub fn reset(&mut self) { self.queues.clear(); }
-
-	pub fn get_queues(&self) -> &HashMap<Id, AudioQueue> { &self.queues }
-	pub fn get_mut_queues(&mut self) -> &mut HashMap<Id, AudioQueue> { &mut self.queues }
 
 	/// `buf` is not cleared before filling it.
 	///

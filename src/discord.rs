@@ -7,7 +7,6 @@ use audiopus::coder::Decoder;
 use serde::Deserialize;
 use serenity::prelude::{Mentionable, Mutex};
 
-use slog::error;
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
 // The voice client can be retrieved in any command using `songbird::get(ctx).await`.
@@ -37,9 +36,8 @@ use songbird::{
     EventContext,
     EventHandler as VoiceEventHandler,
 };
-use tsproto_packets::packets::{Direction, InAudioBuf};
 
-use crate::{I16_CONVERSION_DIVIDER, ListenerHolder};
+use crate::ListenerHolder;
 
 pub(crate) struct Handler;
 
