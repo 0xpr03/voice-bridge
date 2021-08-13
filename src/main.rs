@@ -98,9 +98,19 @@ const SAMPLE_RATE: usize = 48000;
 const STEREO_20MS: usize = SAMPLE_RATE * 2 * FRAME_SIZE_MS / 1000;
 /// The maximum size of an opus frame is 1275 as from RFC6716.
 const MAX_OPUS_FRAME_SIZE: usize = 1275;
+
+const RUST_LOG: &'static str = "RUST_LOG";
 #[tokio::main]
 async fn main() -> Result<()> {
-	dbg!(STEREO_20MS);
+	if std::env::var(RUST_LOG).is_err() {
+        std::env::set_var(
+            RUST_LOG,
+            #[cfg(debug_assertions)]
+            "info,voice_bridge=debug",
+            #[cfg(not(debug_assertions))]
+            "warn,voice_bridge=info",
+        );
+    }
     tracing_subscriber::fmt::init();
 	// init logging stuff used by tsclientlib
     let config: Config = toml::from_str(&std::fs::read_to_string(".credentials.toml").unwrap()).unwrap();
