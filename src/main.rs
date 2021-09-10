@@ -38,7 +38,9 @@ struct Config {
     discord_token: String,
     teamspeak_server: String,
     teamspeak_identity: String,
-    teamspeak_channel: i32,
+    teamspeak_channel_id: Option<u64>,
+	teamspeak_channel_name: Option<String>,
+	teamspeak_channel_password: Option<String>,
 	teamspeak_name: Option<String>,
     /// default 0
     verbose: i32,
@@ -179,6 +181,15 @@ async fn main() -> Result<()> {
 
 	if let Some(name) = config.teamspeak_name {
 		con_config = con_config.name(name);
+	}
+	if let Some(channel) = config.teamspeak_channel_id {
+		con_config = con_config.channel_id(tsclientlib::ChannelId(channel));
+	}
+	if let Some(channel) = config.teamspeak_channel_name {
+		con_config = con_config.channel(channel);
+	}
+	if let Some(password) = config.teamspeak_channel_password {
+		con_config = con_config.password(password);
 	}
 
 	// teamspeak: Optionally set the key of this client, otherwise a new key is generated.
