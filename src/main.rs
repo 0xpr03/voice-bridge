@@ -39,6 +39,7 @@ struct Config {
     teamspeak_server: String,
     teamspeak_identity: String,
     teamspeak_channel: i32,
+	teamspeak_name: Option<String>,
     /// default 0
     verbose: i32,
     /// default 1.0
@@ -171,10 +172,14 @@ async fn main() -> Result<()> {
     let con_id = ConnectionId(0);
 
 	// configure teamspeak client
-	let con_config = Connection::build(config.teamspeak_server)
+	let mut con_config = Connection::build(config.teamspeak_server)
 		.log_commands(config.verbose >= 1)
 		.log_packets(config.verbose >= 2)
 		.log_udp_packets(config.verbose >= 3);
+
+	if let Some(name) = config.teamspeak_name {
+		con_config = con_config.name(name);
+	}
 
 	// teamspeak: Optionally set the key of this client, otherwise a new key is generated.
 	let id = Identity::new_from_str(&config.teamspeak_identity).expect("Can't load identity!");
