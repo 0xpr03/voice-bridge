@@ -369,7 +369,7 @@ impl VoiceEventHandler for Receiver {
                 //     speaking,
                 // );
             },
-            Ctx::SpeakingUpdate {ssrc, speaking} => {
+            Ctx::SpeakingUpdate(_) => {
                 // You can implement logic here which reacts to a user starting
                 // or stopping speaking.
                 //println!(
@@ -378,12 +378,14 @@ impl VoiceEventHandler for Receiver {
                 //     if *speaking {"started"} else {"stopped"},
                 // );
             },
-            Ctx::VoicePacket {audio, packet, payload_offset, payload_end_pad} => {
+            Ctx::VoicePacket(data) => {
+                // {audio, packet, payload_offset, payload_end_pad}
                 // An event which fires for every received audio packet,
 
                 // get raw opus package, we don't decode here and leave that to the AudioHandler
-                let last_bytes = packet.payload.len() - payload_end_pad;
-                let data = &packet.payload[*payload_offset..last_bytes];
+                let packet = data.packet;
+                let last_bytes = packet.payload.len() - data.payload_end_pad;
+                let data = &packet.payload[data.payload_offset..last_bytes];
                 let start = if packet.extension != 0 {
                     match RtpExtensionPacket::new(data) {
                         Some(v) => v.packet_size(),
@@ -410,7 +412,7 @@ impl VoiceEventHandler for Receiver {
                 }
                 
             },
-            Ctx::RtcpPacket {packet, payload_offset, payload_end_pad} => {
+            Ctx::RtcpPacket(_) => {
                 // An event which fires for every received rtcp packet,
                 // containing the call statistics and reporting information.
                 //println!("RTCP packet received: {:?}", packet);

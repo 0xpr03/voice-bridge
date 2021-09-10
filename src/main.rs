@@ -1,6 +1,8 @@
+use std::io::Seek;
 use std::{io::Read, mem::size_of, sync::Arc, time::Duration};
 use byte_slice_cast::AsByteSlice;
 use serde::Deserialize;
+use songbird::input::reader::MediaSource;
 use tsclientlib::{ClientId, Connection, DisconnectOptions, Identity, StreamItem};
 use tsproto_packets::packets::{AudioData, CodecType, OutAudio, OutPacket};
 use audiopus::coder::Encoder;
@@ -20,7 +22,8 @@ struct ConnectionId(u64);
 // to the client builder below, making it easy to install this voice client.
 // The voice client can be retrieved in any command using `songbird::get(ctx).await`.
 use songbird::{SerenityInit, Songbird};
-use songbird::driver::{Config as DriverConfig, DecodeMode};
+use songbird::driver::{DecodeMode};
+use songbird::Config as DriverConfig;
 
 // Import the `Context` to handle commands.
 use serenity::{prelude::{TypeMapKey}};
@@ -61,6 +64,22 @@ type TsAudioHandler = tsclientlib::audio::AudioHandler<TsVoiceId>;
 #[derive(Clone)]
 struct TsToDiscordPipeline {
 	data: Arc<std::sync::Mutex<TsAudioHandler>>,
+}
+
+impl MediaSource for TsToDiscordPipeline {
+    fn is_seekable(&self) -> bool {
+        false
+    }
+
+    fn len(&self) -> Option<u64> {
+        None
+    }
+}
+
+impl Seek for TsToDiscordPipeline {
+    fn seek(&mut self, _: std::io::SeekFrom) -> std::io::Result<u64> {
+        Err(std::io::Error::new(std::io::ErrorKind::Other, "source does not support seeking"))
+    }
 }
 
 impl TsToDiscordPipeline {

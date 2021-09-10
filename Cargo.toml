@@ -49,7 +49,7 @@ version = "0.2"
 ## discord specific
 
 [dependencies.songbird]
-version = "0.1"
+version = "0.2"
 features = ["driver","gateway"]
 
 [dependencies.serenity]
