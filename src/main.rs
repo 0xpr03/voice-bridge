@@ -136,7 +136,7 @@ async fn main() -> Result<()> {
     }
     tracing_subscriber::fmt::init();
 	// init logging stuff used by tsclientlib
-    let config: Config = toml::from_str(&std::fs::read_to_string(".credentials.toml").unwrap()).unwrap();
+    let config: Config = toml::from_str(&std::fs::read_to_string(".credentials.toml").expect("No config file!")).expect("Invalid config");
     let logger = {
 		let decorator = slog_term::TermDecorator::new().build();
 		let drain = slog_term::CompactFormat::new(decorator).build().fuse();

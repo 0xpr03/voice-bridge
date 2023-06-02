@@ -4,6 +4,13 @@ version = "0.1.0"
 authors = ["Aron Heinecke <aron.heinecke@t-online.de>"]
 edition = "2018"
 
+readme = "README.md"
+license = "AGPL-3.0"
+categories = ["api-bindings"]
+repository = "https://github.com/0xpr03/voice-bridge"
+description = "discord teamspeak voice bridge"
+keywords = ["teamspeak", "ts3","discord", "voice", "bridge", "audio"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
