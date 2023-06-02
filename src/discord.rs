@@ -1,12 +1,18 @@
 //! Discord handler
 
-use serde::Deserialize;
-use serenity::prelude::Mentionable;
-
+use anyhow::bail;
+use serenity::builder::CreateApplicationCommand;
+use serenity::model::application::command::Command;
+use serenity::model::prelude::command::CommandOptionType;
+use serenity::model::application::interaction::{Interaction, InteractionResponseType};
+use serenity::model::id::GuildId;
+use serenity::model::prelude::interaction::application_command::{CommandDataOption, CommandDataOptionValue, ApplicationCommandInteraction};
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
 // The voice client can be retrieved in any command using `songbird::get(ctx).await`.
 use songbird::input::Input;
+
+use serenity::prelude::*;
 
 // Import the `Context` to handle commands.
 use serenity::client::Context;
@@ -26,7 +32,7 @@ use serenity::{
 use songbird::packet::PacketSize;
 use songbird::packet::rtp::RtpExtensionPacket;
 use songbird::{
-    model::payload::{ClientConnect, ClientDisconnect, Speaking},
+    model::payload::{ClientDisconnect, Speaking},
     CoreEvent,
     Event,
     EventContext,
@@ -39,27 +45,47 @@ pub(crate) struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, _: Context, ready: Ready) {
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if let Interaction::ApplicationCommand(command) = interaction {
+            println!("Received command interaction: {:#?}", command);
+            let result: Result<(), anyhow::Error> = match command.data.name.as_str() {
+                "join_voice" => handle_join(&ctx,&command).await,
+                _ => Err(anyhow::Error::msg("not implemented :(")),
+            };
+
+            if let Err(err) = result {
+                println!("Failed to run command: {}",err);
+                if let Err(why) = command
+                    .create_interaction_response(&ctx.http, |response| {
+                        response.kind(InteractionResponseType::ChannelMessageWithSource)
+                                .interaction_response_data(|message|message.content(err))
+                    })
+                    .await
+                {
+                    println!("Cannot respond to slash command: {}", why);
+                }
+            }
+        }
+    }
+
+    async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
+        Command::create_global_application_command(&ctx.http, |command| {
+            register_join(command)
+        })
+        .await.expect("Failed creating commands");
     }
 }
 
 #[group]
-#[commands(deafen, join, leave, mute, play, ping, undeafen, unmute)]
+#[commands(deafen, leave, mute, play, ping, undeafen, unmute)]
 pub struct General;
-
-#[derive(Debug,Deserialize)]
-struct Config {
-    discord_token: String,
-    teamspeak_server: String,
-    teamspeak_identity: String,
-    teamspeak_channel: i32,
-}
 
 #[command]
 #[only_in(guilds)]
 async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).expect("No guild found!");
     let guild_id = guild.id;
 
     let manager = songbird::get(ctx).await
@@ -89,31 +115,58 @@ async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-#[command]
-#[only_in(guilds)]
-async fn join(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
-    let guild_id = guild.id;
+fn register_join(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
+    command.name("join_voice").description("Join voice channel")
+        .create_option(|option|
+            option.name("channel").description("channel to join")
+            .kind(CommandOptionType::Channel).required(true))
+}
 
-    let channel_id = guild
-        .voice_states.get(&msg.author.id)
-        .and_then(|voice_state| voice_state.channel_id);
-
-    let connect_to = match channel_id {
-        Some(channel) => channel,
-        None => {
-            check_msg(msg.reply(ctx, "Not in a voice channel").await);
-
-            return Ok(());
-        }
+async fn handle_join(ctx: &Context ,interaction: &ApplicationCommandInteraction) -> anyhow::Result<()> {
+    let guild_id = match interaction.guild_id {
+        Some(id) => id,
+        None => bail!("Command can't be used outside of servers!"),
     };
+    let option = interaction.data.options
+        .get(0)
+        .expect("Expected user option")
+        .resolved
+        .as_ref()
+        .expect("Expected user object");
+
+    let connect_to = match option {
+        CommandDataOptionValue::Channel(part_chan) => part_chan.id,
+        _ => bail!("Expected channel argument!"),
+    };
+    // let guild = msg.guild(&ctx.cache).expect("No guild found!");
+    // let guild_id = guild.id;
+
+    // let channel_id = guild
+    //     .voice_states.get(&msg.author.id)
+    //     .and_then(|voice_state| voice_state.channel_id);
+
+    // let connect_to = match channel_id {
+    //     Some(channel) => channel,
+    //     None => {
+    //         check_msg(msg.reply(ctx, "Not in a voice channel").await);
+
+    //         return Ok(None);
+    //     }
+    // };
+
+    interaction.create_interaction_response(&ctx.http, |response| {
+                    response.kind(InteractionResponseType::DeferredChannelMessageWithSource)
+                    
+                })
+                .await?;
 
     let manager = songbird::get(ctx).await
         .expect("Songbird Voice client placed in at initialisation.").clone();
-
+        
     let (handler_lock, conn_result) = manager.join(guild_id, connect_to).await;
+    conn_result?;
 
-    if let Ok(_) = conn_result {
+    // if let Ok(_) = conn_result {
         // NOTE: this skips listening for the actual connection result.
         let channel: crate::AudioBufferDiscord;
         let ts_buffer: crate::TsToDiscordPipeline;
@@ -147,27 +200,24 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
         );
 
         handler.add_global_event(
-            CoreEvent::ClientConnect.into(),
-            Receiver::new(channel.clone()),
-        );
-
-        handler.add_global_event(
             CoreEvent::ClientDisconnect.into(),
             Receiver::new(channel),
         );
 
-        check_msg(msg.channel_id.say(&ctx.http, &format!("Joined {}", connect_to.mention())).await);
-    } else {
-        check_msg(msg.channel_id.say(&ctx.http, "Error joining the channel").await);
-    }
-
+    //     check_msg(msg.channel_id.say(&ctx.http, &format!("Joined {}", connect_to.mention())).await);
+    // } else {
+    //     check_msg(msg.channel_id.say(&ctx.http, "Error joining the channel").await);
+    // }
+    interaction.create_followup_message(&ctx.http, |response| {
+        response.content("Joined")
+    }).await?;
     Ok(())
 }
 
 #[command]
 #[only_in(guilds)]
 async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).expect("No guild found!");
     let guild_id = guild.id;
 
     let manager = songbird::get(ctx).await
@@ -190,7 +240,7 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[only_in(guilds)]
 async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).expect("No guild found!");
     let guild_id = guild.id;
 
     let manager = songbird::get(ctx).await
@@ -245,7 +295,7 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         return Ok(());
     }
 
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).expect("No guild found!");
     let guild_id = guild.id;
 
     let manager = songbird::get(ctx).await
@@ -278,7 +328,7 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 #[command]
 #[only_in(guilds)]
 async fn undeafen(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).expect("No guild found!");
     let guild_id = guild.id;
 
     let manager = songbird::get(ctx).await
@@ -301,7 +351,7 @@ async fn undeafen(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[only_in(guilds)]
 async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).expect("No guild found!");
     let guild_id = guild.id;
     
     let manager = songbird::get(ctx).await
@@ -416,19 +466,6 @@ impl VoiceEventHandler for Receiver {
                 // An event which fires for every received rtcp packet,
                 // containing the call statistics and reporting information.
                 //println!("RTCP packet received: {:?}", packet);
-            },
-            Ctx::ClientConnect(
-                ClientConnect {audio_ssrc, video_ssrc, user_id, ..}
-            ) => {
-                // You can implement your own logic here to handle a user who has joined the
-                // voice channel e.g., allocate structures, map their SSRC to User ID.
-
-                println!(
-                    "Client connected: user {:?} has audio SSRC {:?}, video SSRC {:?}",
-                    user_id,
-                    audio_ssrc,
-                    video_ssrc,
-                );
             },
             Ctx::ClientDisconnect(
                 ClientDisconnect {user_id, ..}

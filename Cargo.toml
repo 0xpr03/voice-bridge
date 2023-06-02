@@ -17,7 +17,7 @@ keywords = ["teamspeak", "ts3","discord", "voice", "bridge", "audio"]
 lto = true
 
 [dependencies]
-toml = "0.5"
+toml = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 
 # pushing [f32] to [u8] and vice verca
@@ -25,7 +25,7 @@ byte-slice-cast = "1"
 
 # tokio tracing from songbird
 tracing = "0.1"
-tracing-subscriber = "0.2"
+tracing-subscriber = "0.3"
 tracing-futures = "0.2"
 
 ### TS stuff
@@ -56,12 +56,12 @@ version = "0.2"
 ## discord specific
 
 [dependencies.songbird]
-version = "0.2"
+version = "0.3"
 features = ["driver","gateway"]
 
 [dependencies.serenity]
-version = "0.10"
-features = ["client", "standard_framework", "voice","native_tls_backend"]
+version = "0.11"
+features = ["client", "standard_framework", "voice","native_tls_backend", "builder"]
 
 ## tokio
 
