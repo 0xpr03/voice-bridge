@@ -45,7 +45,6 @@ pub(crate) struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
             println!("Received command interaction: {:#?}", command);
@@ -56,12 +55,20 @@ impl EventHandler for Handler {
 
             if let Err(err) = result {
                 println!("Failed to run command: {}",err);
-                if let Err(why) = command
-                    .create_interaction_response(&ctx.http, |response| {
-                        response.kind(InteractionResponseType::ChannelMessageWithSource)
-                                .interaction_response_data(|message|message.content(err))
-                    })
-                    .await
+                if let Err(why) = if command.get_interaction_response(&ctx.http).await.is_err() {
+                        command
+                        .create_interaction_response(&ctx.http, |response| {
+                            response.kind(InteractionResponseType::ChannelMessageWithSource)
+                                    .interaction_response_data(|message|message.content(err))
+                        })
+                        .await
+                    } else {
+                        command
+                        .edit_original_interaction_response(&ctx.http, |response| {
+                            response.content(err)
+                        })
+                        .await.map(|_|())
+                    }
                 {
                     println!("Cannot respond to slash command: {}", why);
                 }
@@ -154,11 +161,12 @@ async fn handle_join(ctx: &Context ,interaction: &ApplicationCommandInteraction)
     //     }
     // };
 
-    interaction.create_interaction_response(&ctx.http, |response| {
-                    response.kind(InteractionResponseType::DeferredChannelMessageWithSource)
-                    
-                })
-                .await?;
+    interaction.create_interaction_response(&ctx.http, |response: &mut serenity::builder::CreateInteractionResponse| {
+        response.kind(InteractionResponseType::DeferredChannelMessageWithSource)
+        .interaction_response_data(|f| f.ephemeral(true))
+        
+    })
+    .await;
 
     let manager = songbird::get(ctx).await
         .expect("Songbird Voice client placed in at initialisation.").clone();
@@ -208,9 +216,15 @@ async fn handle_join(ctx: &Context ,interaction: &ApplicationCommandInteraction)
     // } else {
     //     check_msg(msg.channel_id.say(&ctx.http, "Error joining the channel").await);
     // }
-    interaction.create_followup_message(&ctx.http, |response| {
-        response.content("Joined")
-    }).await?;
+    println!("joined");
+    interaction.edit_original_interaction_response(&ctx.http, |response| {
+        // response.kind(InteractionResponseType::ChannelMessageWithSource).content("Joined")
+        response.content("Joined")  
+    })
+    .await?;
+    // interaction.create_followup_message(&ctx.http, |response| {
+    //     response.content("Joined")
+    // }).await?;
     Ok(())
 }
 
