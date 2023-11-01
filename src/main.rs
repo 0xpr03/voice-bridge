@@ -2,6 +2,7 @@ use std::io::Seek;
 use std::{io::Read, mem::size_of, sync::Arc, time::Duration};
 use byte_slice_cast::AsByteSlice;
 use serde::Deserialize;
+use serenity::prelude::GatewayIntents;
 use songbird::input::reader::MediaSource;
 use tsclientlib::{ClientId, Connection, DisconnectOptions, Identity, StreamItem};
 use tsproto_packets::packets::{AudioData, CodecType, OutAudio, OutPacket};
@@ -10,7 +11,7 @@ use futures::prelude::*;
 use slog::{debug, o, Drain, Logger};
 use tokio::task;
 use tokio::sync::Mutex;
-use anyhow::*;
+use anyhow::{bail,Result};
 
 mod discord;
 mod discord_audiohandler;
@@ -71,7 +72,7 @@ impl MediaSource for TsToDiscordPipeline {
         false
     }
 
-    fn len(&self) -> Option<u64> {
+    fn byte_len(&self) -> Option<u64> {
         None
     }
 }
@@ -136,7 +137,7 @@ async fn main() -> Result<()> {
     }
     tracing_subscriber::fmt::init();
 	// init logging stuff used by tsclientlib
-    let config: Config = toml::from_str(&std::fs::read_to_string(".credentials.toml").unwrap()).unwrap();
+    let config: Config = toml::from_str(&std::fs::read_to_string(".credentials.toml").expect("No config file!")).expect("Invalid config");
     let logger = {
 		let decorator = slog_term::TermDecorator::new().build();
 		let drain = slog_term::CompactFormat::new(decorator).build().fuse();
@@ -160,8 +161,12 @@ async fn main() -> Result<()> {
             .decode_mode(DecodeMode::Decrypt)
     );
 
+	let intents = GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT
+		| GatewayIntents::GUILD_VOICE_STATES;
+
 	// init discord client
-    let mut client = Client::builder(&config.discord_token)
+    let mut client = Client::builder(&config.discord_token, intents)
         .event_handler(discord::Handler)
         .framework(framework)
         .register_songbird_with(songbird.into())

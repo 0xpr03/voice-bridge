@@ -7,6 +7,10 @@ This software is in an MVP status, use at your own risk, like always.
 ## Building
 get [rust](https://rust-lang.org) compiler with cargo
 
+## debian/ubuntu
+
+Install pkg-config, libssl and libopus: `sudo apt install pkg-config libssl-dev libopus-dev`.
+
 Then run `cargo build --release`
 .exe/elf is inside target/release/
 You can also run `cargo run --release` instead to directly build & execute the resulting binary.
